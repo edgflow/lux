@@ -44,10 +44,12 @@ func (w *responseWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
-func (w *responseWriter) reset(writer http.ResponseWriter) {
+func (w *responseWriter) reset(writer http.ResponseWriter, conn net.Conn) {
 	w.ResponseWriter = writer
 	w.size = noWritten
 	w.status = defaultStatus
+	w.hijackReader = bufio.NewReader(conn)
+	w.writer = bufio.NewWriter(conn)
 }
 
 func (w *responseWriter) Header() http.Header {

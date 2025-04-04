@@ -115,16 +115,12 @@ func (e *Engine) handleConn(conn net.Conn) {
 	// Create a response writer using the connection
 	writer := NewResponseWriter(conn, req)
 
-	ctx := Context{
-		Request:   req,
-		writermem: *writer.(*responseWriter),
-		index:     -1,
-	}
-
+	ctx := e.pool.Get().(*Context)
+	ctx.writermem.reset(writer, conn)
+	ctx.Request = req
 	ctx.reset()
-
-	e.handleHttpRequest(&ctx)
-	return
+	e.handleHttpRequest(ctx)
+	e.pool.Put(ctx)
 }
 func (e *Engine) handleHttpRequest(c *Context) {
 	httpMehod := c.Request.Method
