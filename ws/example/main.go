@@ -1,8 +1,8 @@
 package main
 
 import (
-	websocket "github.com/edgflow/lux/ws"
 	"fmt"
+	websocket "github.com/edgflow/lux/ws"
 	"log"
 	"time"
 )
