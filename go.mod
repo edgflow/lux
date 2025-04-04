@@ -1,4 +1,4 @@
-module edgflow/lux
+module github.com/edgflow/lux
 
 go 1.24.0
 

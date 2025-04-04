@@ -1,8 +1,8 @@
 package main
 
 import (
-	"edgflow/lux"
 	"fmt"
+	"github.com/edgflow/lux"
 
 	"net"
 	"os"
