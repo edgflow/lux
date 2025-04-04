@@ -19,7 +19,7 @@ Lux is a simplified implementation of the core features found in the popular Gin
 ## Installation
 
 ```bash
-go get github.com/yourusername/lux
+go get github.com/edgflow/lux
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ go get github.com/yourusername/lux
 package main
 
 import (
-    "github.com/yourusername/lux"
+    "github.com/edgflow/lux"
     "net/http"
 )
 
