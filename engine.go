@@ -36,12 +36,6 @@ func NewEngine() *Engine {
 	return engine
 }
 
-type skippedNode struct {
-	path        string
-	node        *Node
-	paramsCount int16
-}
-
 func (engine *Engine) allocateContext(maxParams uint16) *Context {
 	v := make(Params, 0, maxParams)
 	skippedNodes := make([]skippedNode, 0, engine.maxSections)

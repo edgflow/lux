@@ -196,27 +196,58 @@ func (nt *NodeTree) addRoute(path string, handlers []HandlerFunc) {
 func (nt *NodeTree) Find(path string) (HandlerChain, Params) {
 	segments := splitPath(path)
 	params := make(Params, 0)
-	handler := nt.findNode(nt.Root, segments, &params, 0)
+	skippedNodes := make([]skippedNode, 0, 2) // Create skippedNodes for backtracking
+	handler := nt.findNode(nt.Root, segments, &params, 0, &skippedNodes)
 	return handler, params
 }
 
+// skippedNode represents a potential alternative path during route matching
+type skippedNode struct {
+	node        *Node
+	segmentIdx  int
+	paramsCount int
+}
+
 // findNode recursively searches for a matching node in the tree
-func (nt *NodeTree) findNode(node *Node, segments []string, params *Params, index int) HandlerChain {
+func (nt *NodeTree) findNode(node *Node, segments []string, params *Params, index int, skippedNodes *[]skippedNode) HandlerChain {
 	// End of path, return handlers if any
 	if index >= len(segments) {
-		return node.Handlers
+		if len(node.Handlers) > 0 {
+			return node.Handlers
+		}
+
+		// No handler found, try backtracking
+		return nt.tryBacktrack(segments, params, skippedNodes)
 	}
 
 	segment := segments[index]
 	// Handle empty segment at the end (trailing slash)
 	if segment == "" && index == len(segments)-1 {
-		return node.Handlers
+		if len(node.Handlers) > 0 {
+			return node.Handlers
+		}
+
+		// No handler found, try backtracking
+		return nt.tryBacktrack(segments, params, skippedNodes)
 	}
 
 	// First try to match static nodes (most common case)
 	for _, child := range node.Children {
 		if child.NodeType == Static && child.Path == segment {
-			if handler := nt.findNode(child, segments, params, index+1); handler != nil {
+			// Before going down this path, check if there are parameter nodes
+			// that could be alternative paths
+			for _, paramChild := range node.Children {
+				if paramChild.NodeType == Parameter || paramChild.NodeType == Wildcard {
+					// Save this as a skipped node for potential backtracking
+					*skippedNodes = append(*skippedNodes, skippedNode{
+						node:        paramChild,
+						segmentIdx:  index,
+						paramsCount: len(*params),
+					})
+				}
+			}
+
+			if handler := nt.findNode(child, segments, params, index+1, skippedNodes); handler != nil {
 				return handler
 			}
 		}
@@ -225,15 +256,20 @@ func (nt *NodeTree) findNode(node *Node, segments []string, params *Params, inde
 	// Then try parameter nodes
 	for _, child := range node.Children {
 		if child.NodeType == Parameter {
+			// Save previous params length for backtracking
+			originalParamsLen := len(*params)
+
 			*params = append(*params, Param{
 				Key:   child.Path[1:], // skip the ':' prefix
 				Value: segment,
 			})
-			if handler := nt.findNode(child, segments, params, index+1); handler != nil {
+
+			if handler := nt.findNode(child, segments, params, index+1, skippedNodes); handler != nil {
 				return handler
 			}
+
 			// Remove param if no match found with this path
-			*params = (*params)[:len(*params)-1]
+			*params = (*params)[:originalParamsLen]
 		}
 	}
 
@@ -249,8 +285,44 @@ func (nt *NodeTree) findNode(node *Node, segments []string, params *Params, inde
 		}
 	}
 
-	// No match found
-	return nil
+	// No match found, try backtracking
+	return nt.tryBacktrack(segments, params, skippedNodes)
+}
+
+// tryBacktrack attempts to find an alternative path using saved skipped nodes
+func (nt *NodeTree) tryBacktrack(segments []string, params *Params, skippedNodes *[]skippedNode) HandlerChain {
+	// No more skipped nodes to try
+	if len(*skippedNodes) == 0 {
+		return nil
+	}
+
+	// Pop the last skipped node
+	lastIdx := len(*skippedNodes) - 1
+	skipped := (*skippedNodes)[lastIdx]
+	*skippedNodes = (*skippedNodes)[:lastIdx]
+
+	// Reset params to the state when this node was skipped
+	*params = (*params)[:skipped.paramsCount]
+
+	// Try this alternative path
+	if skipped.node.NodeType == Parameter {
+		segment := segments[skipped.segmentIdx]
+		*params = append(*params, Param{
+			Key:   skipped.node.Path[1:], // skip the ':' prefix
+			Value: segment,
+		})
+		return nt.findNode(skipped.node, segments, params, skipped.segmentIdx+1, skippedNodes)
+	} else if skipped.node.NodeType == Wildcard {
+		remaining := strings.Join(segments[skipped.segmentIdx:], "/")
+		*params = append(*params, Param{
+			Key:   skipped.node.Path[1:], // skip '*' prefix
+			Value: remaining,
+		})
+		return skipped.node.Handlers
+	}
+
+	// Continue with static node
+	return nt.findNode(skipped.node, segments, params, skipped.segmentIdx+1, skippedNodes)
 }
 
 // splitPath splits a URL path into segments
